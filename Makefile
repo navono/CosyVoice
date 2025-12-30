@@ -8,7 +8,7 @@ CONDA_ENV := cosyvoice
 CONDA_ACTIVATE := . $$(conda info --base)/etc/profile.d/conda.sh && conda activate $(CONDA_ENV) &&
 
 gradio:
-	python webui.py --port 15000 --model_dir $(MODEL_DIR)
+	python webui.py --port 15000 --model_dir $(MODEL_DIR) --device $(DEVICE)
 
 openai:
 	python runtime/python/fastapi/openai_compatible.py --model_dir $(MODEL_DIR) --port $(PORT) --host $(HOST) --device $(DEVICE)

@@ -13,6 +13,18 @@
 # limitations under the License.
 import os
 import sys
+
+# IMPORTANT: Set CUDA_VISIBLE_DEVICES BEFORE importing torch
+# PyTorch initializes CUDA on import, so this must be done first
+device_arg = None
+for i, arg in enumerate(sys.argv):
+    if arg == '--device' and i + 1 < len(sys.argv):
+        device_arg = sys.argv[i + 1]
+        break
+if device_arg is None:
+    device_arg = os.getenv('DEVICE', '0')
+os.environ['CUDA_VISIBLE_DEVICES'] = device_arg
+
 import argparse
 import logging
 import io
@@ -417,10 +429,9 @@ def load_model(model_dir: str, load_jit: bool = False, load_trt: bool = False,
     """Load CosyVoice model"""
     global cosyvoice
 
-    # Set CUDA device
+    # Log CUDA device info (CUDA_VISIBLE_DEVICES was set before torch import)
     if torch.cuda.is_available():
-        os.environ['CUDA_VISIBLE_DEVICES'] = device
-        logging.info(f"Set CUDA_VISIBLE_DEVICES={device}")
+        logging.info(f"Using GPU device: cuda (mapped to physical GPU via CUDA_VISIBLE_DEVICES={device})")
     else:
         logging.warning("CUDA is not available, using CPU")
 

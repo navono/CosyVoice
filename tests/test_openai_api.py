@@ -26,6 +26,7 @@ import os
 import base64
 import pytest
 import requests
+import shutil
 from typing import Optional
 
 
@@ -34,6 +35,11 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 MODEL_DIR = os.getenv("MODEL_DIR", "./pretrained_models/Fun-CosyVoice3-0.5B")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./outputs")
 
+# clear output dir
+def clear_output_dir():
+    if os.path.exists(OUTPUT_DIR):
+        shutil.rmtree(OUTPUT_DIR)
+    os.makedirs(OUTPUT_DIR)
 
 class CosyVoiceAPIClient:
     """Client for CosyVoice OpenAI Compatible API"""
@@ -379,6 +385,7 @@ def test_instruct_mode(api_client: CosyVoiceAPIClient):
     "用悲伤的语气",
     "用激动的语气",
     "用平静的语气",
+    "用温柔的语气",
 ])
 @pytest.mark.skipif("os.getenv('SKIP_SFT_TESTS', 'false') == 'true'", reason="Instruct mode not supported by model")
 def test_instruct_mode_different_instructions(api_client: CosyVoiceAPIClient, instruct: str):
@@ -426,6 +433,59 @@ def test_instruct2_mode_different_instructions(api_client: CosyVoiceAPIClient, s
         text="测试不同的指令",
         voice="alloy",
         instruct_text=instruct_text_with_system,
+        prompt_wav=sample_audio_path,
+        response_format="wav",
+    )
+
+    assert len(audio_data) > 0
+
+
+# ============================================================================
+# Additional CosyVoice3 Tests
+# ============================================================================
+
+def test_instruct2_cantonese(api_client: CosyVoiceAPIClient, sample_audio_path: str):
+    """Test instruct2 mode with Cantonese dialect"""
+    instruct_text = "You are a helpful assistant. 请用广东话表达。<|endofprompt|>"
+    audio_data = api_client.create_speech(
+        text="好少咯，一般系放嗰啲国庆啊，中秋嗰啲可能会咯。",
+        voice="alloy",
+        instruct_text=instruct_text,
+        prompt_wav=sample_audio_path,
+        response_format="wav",
+    )
+
+    assert len(audio_data) > 0
+    save_audio_output(audio_data, "instruct2_cantonese")
+
+
+def test_instruct2_fast_speed(api_client: CosyVoiceAPIClient, sample_audio_path: str):
+    """Test instruct2 mode with fast speed instruction"""
+    instruct_text = "You are a helpful assistant. 请用尽可能快地语速说这句话。<|endofprompt|>"
+    audio_data = api_client.create_speech(
+        text="收到好友从远方寄来的生日礼物，那份意外的惊喜与深深的祝福让我心中充满了甜蜜的快乐。",
+        voice="alloy",
+        instruct_text=instruct_text,
+        prompt_wav=sample_audio_path,
+        response_format="wav",
+    )
+
+    assert len(audio_data) > 0
+    save_audio_output(audio_data, "instruct2_fast_speed")
+
+
+@pytest.mark.parametrize("instruct_text,text", [
+    ("You are a helpful assistant. 请用悲伤的语气表达。<|endofprompt|>", "今天天气不好，我感到很失落。"),
+    ("You are a helpful assistant. 请用愤怒的语气表达。<|endofprompt|>", "这真是太令人愤怒了！"),
+    ("You are a helpful assistant. 请用讲述故事的语气表达。<|endofprompt|>", "很久很久以前，在一个遥远的地方，住着一位勇敢的骑士。"),
+    ("You are a helpful assistant. 请用正式的语气表达。<|endofprompt|>", "尊敬的各位来宾，欢迎光临今天的会议。"),
+])
+def test_instruct2_various_styles(api_client: CosyVoiceAPIClient, sample_audio_path: str, instruct_text: str, text: str):
+    """Test instruct2 mode with various styles and emotions"""
+    audio_data = api_client.create_speech(
+        text=text,
+        voice="alloy",
+        instruct_text=instruct_text,
         prompt_wav=sample_audio_path,
         response_format="wav",
     )

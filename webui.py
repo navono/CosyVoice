@@ -13,6 +13,19 @@
 # limitations under the License.
 import os
 import sys
+
+# IMPORTANT: Parse device and set CUDA_VISIBLE_DEVICES BEFORE importing torch
+# PyTorch initializes CUDA on import, so this must be done first
+device = os.getenv('DEVICE', '0')
+for i, arg in enumerate(sys.argv):
+    if arg.startswith('--device'):
+        if '=' in arg:
+            device = arg.split('=', 1)[1]
+        elif i + 1 < len(sys.argv):
+            device = sys.argv[i + 1]
+        break
+os.environ['CUDA_VISIBLE_DEVICES'] = device
+
 import argparse
 import gradio as gr
 import numpy as np
@@ -169,6 +182,10 @@ if __name__ == '__main__':
                         type=str,
                         default='pretrained_models/CosyVoice2-0.5B',
                         help='local path or modelscope repo id')
+    parser.add_argument('--device',
+                        type=str,
+                        default=os.getenv('DEVICE', '0'),
+                        help='CUDA device to use (e.g., 0, 1, 6)')
     args = parser.parse_args()
     cosyvoice = AutoModel(model_dir=args.model_dir)
 
