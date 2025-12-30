@@ -1,0 +1,38 @@
+services:
+  cosyvoice-openai:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: cosyvoice-openai:latest
+    container_name: cosyvoice-openai
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - MODEL_DIR=${MODEL_DIR:-/data/models/hf_models/hub/models--FunAudioLLM--Fun-CosyVoice3-0.5B-2512/snapshots/5646a54a6bea9eb1ec64b3ded068fdcf5a65f9ae}
+      - PORT=${PORT:-8000}
+      - HOST=${HOST:-0.0.0.0}
+      - DEVICE=${DEVICE:-0}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${GPU_IDS:-all}"]
+              capabilities: [gpu]
+    volumes:
+      # Mount actual models directory (symlinks point here)
+      - /data/models:/data/models:ro
+      # Mount cache directory for model downloads
+      - cosyvoice_cache:/root/.cache/modelscope
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    shm_size: '8gb'  # Increase shared memory for large models
+
+volumes:
+  cosyvoice_cache:
+    driver: local

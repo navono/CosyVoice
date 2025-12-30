@@ -31,6 +31,10 @@ __pycache__/
 # macOS dir files
 .DS_Store
 
+# Environment files
+.env
+.env.local
+
 exp
 data
 raw_wav

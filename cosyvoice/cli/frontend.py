@@ -38,14 +38,22 @@ class CosyVoiceFrontEnd:
                  allowed_special: str = 'all'):
         self.tokenizer = get_tokenizer()
         self.feat_extractor = feat_extractor
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:6' if torch.cuda.is_available() else 'cpu')
         option = onnxruntime.SessionOptions()
         option.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         option.intra_op_num_threads = 1
         self.campplus_session = onnxruntime.InferenceSession(campplus_model, sess_options=option, providers=["CPUExecutionProvider"])
+        # Set GPU device ID for ONNX Runtime to use cuda:6
+        providers = ["CPUExecutionProvider"]
+        if torch.cuda.is_available():
+            providers = [
+                ("CUDAExecutionProvider", {
+                    "device_id": 6,
+                }),
+                "CPUExecutionProvider"
+            ]
         self.speech_tokenizer_session = onnxruntime.InferenceSession(speech_tokenizer_model, sess_options=option,
-                                                                     providers=["CUDAExecutionProvider" if torch.cuda.is_available() else
-                                                                                "CPUExecutionProvider"])
+                                                                     providers=providers)
         if os.path.exists(spk2info):
             self.spk2info = torch.load(spk2info, map_location=self.device)
         else:

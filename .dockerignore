@@ -1,0 +1,62 @@
+# Models (symlinks to /data/models, exclude since we mount via volume)
+pretrained_models/
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.vs/
+.idea/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cache
+.cache/
+*.egg-info/
+.pytest_cache/
+
+# Logs
+*.log
+tensorboard/
+
+# Training/Inference artifacts
+*.wav
+*.m4a
+*.aac
+*.pt
+*.tar
+exp/
+data/
+raw_wav/
+
+# Build
+**/*build*
+
+# Generated files
+*_pb2_grpc.py
+*_pb2.py
+compile_commands.json
+
+# Environment
+.env
+.env.local
+
+# Tests
+tests/

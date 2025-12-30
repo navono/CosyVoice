@@ -9,8 +9,9 @@ ENV PYTHONUNBUFFERED=1
 SHELL ["/bin/bash", "--login", "-c"]
 
 RUN apt-get update -y --fix-missing
-RUN apt-get install -y git build-essential curl wget ffmpeg unzip git git-lfs sox libsox-dev && \
+RUN apt-get install -y git build-essential curl wget ffmpeg unzip git git-lfs sox libsox-dev ca-certificates && \
     apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
     git lfs install
 
 # ==================================================================
@@ -42,10 +43,24 @@ WORKDIR /workspace
 
 ENV PYTHONPATH="${PYTHONPATH}:/workspace/CosyVoice:/workspace/CosyVoice/third_party/Matcha-TTS"
 
-RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git
+# RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git
+# Copy local source code instead of cloning from GitHub
+COPY . /workspace/CosyVoice
 
 RUN conda activate ${VENV} && conda install -y -c conda-forge pynini==2.1.5
 RUN conda activate ${VENV} && cd CosyVoice && \
     pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host=mirrors.aliyun.com --no-cache-dir
 
 WORKDIR /workspace/CosyVoice
+
+# Expose port for OpenAI compatible API
+EXPOSE 8000
+
+# Set default command to run OpenAI compatible API server
+ENV MODEL_DIR=iic/CosyVoice-300M
+ENV PORT=8000
+ENV HOST=0.0.0.0
+
+# Use shell form to expand environment variables
+SHELL ["/bin/bash", "--login", "-c"]
+CMD python runtime/python/fastapi/openai_compatible.py --model_dir ${MODEL_DIR} --port ${PORT} --host ${HOST}
