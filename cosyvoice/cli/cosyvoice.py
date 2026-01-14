@@ -228,13 +228,21 @@ class CosyVoice3(CosyVoice2):
 
 
 def AutoModel(**kwargs):
-    if not os.path.exists(kwargs['model_dir']):
-        kwargs['model_dir'] = snapshot_download(kwargs['model_dir'])
-    if os.path.exists('{}/cosyvoice.yaml'.format(kwargs['model_dir'])):
+    model_dir = kwargs["model_dir"]
+    if not os.path.exists(model_dir):
+        model_dir = snapshot_download(model_dir)
+        kwargs["model_dir"] = model_dir
+
+    if os.path.exists("{}/cosyvoice.yaml".format(model_dir)):
+        # CosyVoice supports: load_jit, load_trt, fp16, trt_concurrent
         return CosyVoice(**kwargs)
-    elif os.path.exists('{}/cosyvoice2.yaml'.format(kwargs['model_dir'])):
+    elif os.path.exists("{}/cosyvoice2.yaml".format(model_dir)):
+        # CosyVoice2 supports: load_jit, load_trt, load_vllm, fp16, trt_concurrent
+        # Remove load_jit if not supported (keep it for now as CosyVoice2 supports it)
         return CosyVoice2(**kwargs)
-    elif os.path.exists('{}/cosyvoice3.yaml'.format(kwargs['model_dir'])):
-        return CosyVoice3(**kwargs)
+    elif os.path.exists("{}/cosyvoice3.yaml".format(model_dir)):
+        # CosyVoice3 only supports: load_trt, load_vllm, fp16, trt_concurrent (NO load_jit)
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k != "load_jit"}
+        return CosyVoice3(**filtered_kwargs)
     else:
         raise TypeError('No valid model type found!')

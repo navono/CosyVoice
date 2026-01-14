@@ -436,6 +436,13 @@ def load_model(model_dir: str, load_jit: bool = False, load_trt: bool = False,
         logging.warning("CUDA is not available, using CPU")
 
     logging.info(f"Loading model from: {model_dir}")
+    logging.info(f"Model directory exists: {os.path.exists(model_dir)}")
+    if os.path.exists(model_dir):
+        logging.info(f"Model directory contents: {os.listdir(model_dir)}")
+    else:
+        logging.error(f"Model directory does not exist: {model_dir}")
+        logging.info(f"Current working directory: {os.getcwd()}")
+        logging.info(f"Environment MODEL_DIR: {os.getenv('MODEL_DIR', 'not set')}")
 
     try:
         # Try AutoModel first to automatically detect model type
