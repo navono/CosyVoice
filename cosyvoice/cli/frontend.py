@@ -56,7 +56,7 @@ class CosyVoiceFrontEnd:
         self.speech_tokenizer_session = onnxruntime.InferenceSession(speech_tokenizer_model, sess_options=option,
                                                                      providers=providers)
         if os.path.exists(spk2info):
-            self.spk2info = torch.load(spk2info, map_location=self.device)
+            self.spk2info = torch.load(spk2info, map_location=self.device, weights_only=True)
         else:
             self.spk2info = {}
         self.allowed_special = allowed_special
