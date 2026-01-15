@@ -48,6 +48,9 @@ from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2, CosyVoice3, AutoModel
 
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 
+# Voice directory for custom voice samples
+VOICE_DIR = os.getenv("VOICE_DIR", "/workspace/voices")
+
 # OpenAI API compatible models
 app = FastAPI(
     title="CosyVoice OpenAI Compatible API",
@@ -69,15 +72,114 @@ app.add_middleware(
 cosyvoice: Optional[CosyVoice | CosyVoice2 | CosyVoice3] = None
 
 
-# Voice mapping - OpenAI voices to CosyVoice speakers
-VOICE_MAPPING = {
-    'alloy': 'female_source',  # Default female voice
-    'echo': 'male_source',     # Default male voice
-    'fable': 'zh_female_emo_1',
-    'onyx': 'zh_male_emo_1',
-    'nova': 'zh_female_source',
-    'shimmer': 'zh_male_source',
-}
+def list_available_voices() -> list[dict]:
+    """
+    List all available voice files in VOICE_DIR.
+
+    Returns:
+        List of voice info dicts with 'name', 'audio_file', 'text_file', 'has_text'
+    """
+    voices = []
+
+    if not os.path.exists(VOICE_DIR):
+        logging.warning(f"Voice directory does not exist: {VOICE_DIR}")
+        return voices
+
+    # Scan for audio files
+    audio_extensions = {".mp3", ".wav", ".flac", ".ogg", ".m4a"}
+    seen_base_names = set()
+
+    try:
+        for filename in os.listdir(VOICE_DIR):
+            file_path = os.path.join(VOICE_DIR, filename)
+
+            # Skip if not a file
+            if not os.path.isfile(file_path):
+                continue
+
+            # Check if it's an audio file
+            name, ext = os.path.splitext(filename)
+            if ext.lower() in audio_extensions and name not in seen_base_names:
+                seen_base_names.add(name)
+
+                # Check for corresponding text file
+                text_file = os.path.join(VOICE_DIR, f"{name}.txt")
+                has_text = os.path.exists(text_file)
+
+                voices.append(
+                    {
+                        "name": name,
+                        "audio_file": filename,
+                        "text_file": f"{name}.txt" if has_text else None,
+                        "has_text": has_text,
+                    }
+                )
+
+        logging.info(f"Found {len(voices)} voice files in {VOICE_DIR}")
+    except Exception as e:
+        logging.error(f"Error scanning voice directory: {e}")
+
+    return voices
+
+
+def resolve_voice_file(voice: str) -> tuple[Optional[str], Optional[str]]:
+    """
+    Resolve voice parameter to audio file path and prompt text.
+
+    Looks for voice file in VOICE_DIR:
+    - Audio file: {VOICE_DIR}/{voice}.mp3 (or .wav, .flac, etc.)
+    - Text file: {VOICE_DIR}/{voice}.txt (optional)
+
+    Returns:
+        tuple: (audio_file_path, prompt_text) or (None, None) if not found
+    """
+    if not voice:
+        return None, None
+
+    # Check if VOICE_DIR exists
+    if not os.path.exists(VOICE_DIR):
+        logging.warning(f"Voice directory does not exist: {VOICE_DIR}")
+        return None, None
+
+    # Remove extension if present to get base name
+    base_name = os.path.splitext(voice)[0]
+
+    # Try to find audio file (.mp3, .wav, etc.)
+    audio_file = None
+    for ext in [".mp3", ".wav", ".flac", ".ogg", ".m4a"]:
+        candidate = os.path.join(VOICE_DIR, f"{base_name}{ext}")
+        if os.path.exists(candidate):
+            audio_file = candidate
+            break
+        # Also try with original voice name if it has extension
+        if voice != base_name:
+            candidate = os.path.join(VOICE_DIR, voice)
+            if os.path.exists(candidate):
+                audio_file = candidate
+                break
+
+    if not audio_file:
+        logging.warning(f"Voice audio file not found for: {voice}")
+        return None, None
+
+    # Try to find corresponding text file
+    text_file = os.path.join(VOICE_DIR, f"{base_name}.txt")
+    prompt_text = None
+
+    if os.path.exists(text_file):
+        try:
+            with open(text_file, "r", encoding="utf-8") as f:
+                prompt_text = f.read().strip()
+            logging.info(f"Loaded prompt text from {text_file}: {prompt_text[:50]}...")
+        except Exception as e:
+            logging.warning(f"Failed to read text file {text_file}: {e}")
+    else:
+        logging.info(f"No text file found for {voice}, will use cross-lingual mode")
+
+    logging.info(
+        f"Resolved voice '{voice}' to audio: {audio_file}, text: {prompt_text is not None}"
+    )
+    return audio_file, prompt_text
 
 
 def load_prompt_audio(prompt_wav: str) -> np.ndarray:
@@ -197,18 +299,62 @@ def generate_audio_data(model_output, output_format: str = 'wav'):
 
 # OpenAI API compatible request models
 class CreateSpeechRequest(BaseModel):
-    model: str = Field(..., description="The TTS model to use (e.g., tts-1, tts-1-hd)")
-    input: str = Field(..., min_length=1, description="The text to generate audio for")
-    voice: str = Field(..., description="The voice to use (alloy, echo, fable, onyx, nova, shimmer)")
-    response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = Field(
-        default="mp3",
-        description="The format to audio in"
+    """
+    OpenAI-compatible TTS request model.
+
+    Standard OpenAI parameters:
+    - model: TTS model to use (tts-1, tts-1-hd)
+    - input: Text to convert to speech (max 4096 characters)
+    - voice: Voice to use (alloy, echo, fable, onyx, nova, shimmer)
+    - response_format: Audio format (mp3, opus, aac, flac, wav, pcm)
+    - speed: Playback speed (0.25 to 4.0)
+
+    CosyVoice extensions:
+    - prompt_text: Reference text for voice cloning
+    - prompt_wav: Reference audio (base64/URL) for voice cloning
+    - instruct_text: Instruction for voice style control
+    """
+
+    # OpenAI standard parameters (required)
+    model: str = Field(
+        ..., description="The TTS model to use", examples=["tts-1", "tts-1-hd"]
     )
-    speed: float = Field(default=1.0, ge=0.25, le=4.0, description="The speed of the generated audio")
-    # CosyVoice specific parameters
-    prompt_text: Optional[str] = Field(None, description="Prompt text for zero-shot voice cloning")
-    prompt_wav: Optional[str] = Field(None, description="Base64 encoded audio or URL for voice reference (used with prompt_text)")
-    instruct_text: Optional[str] = Field(None, description="Instruction text for instruct mode")
+    input: str = Field(
+        ...,
+        min_length=1,
+        max_length=4096,
+        description="The text to generate audio for (max 4096 characters)",
+    )
+    voice: str = Field(
+        ...,
+        description="The voice to use for speech generation",
+        examples=["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
+    )
+
+    # OpenAI standard parameters (optional)
+    response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = Field(
+        default="mp3", description="The audio format for the output"
+    )
+    speed: float = Field(
+        default=1.0,
+        ge=0.25,
+        le=4.0,
+        description="The speed of the generated audio (0.25 to 4.0)",
+    )
+
+    # CosyVoice-specific extensions (optional)
+    prompt_text: Optional[str] = Field(
+        default=None,
+        description="[CosyVoice] Reference text for zero-shot voice cloning",
+    )
+    prompt_wav: Optional[str] = Field(
+        default=None,
+        description="[CosyVoice] Reference audio (base64 encoded or URL) for voice cloning",
+    )
+    instruct_text: Optional[str] = Field(
+        default=None,
+        description="[CosyVoice] Instruction text for voice style control (e.g., 'speaking with emotion')",
+    )
 
 
 class VoicesResponse(BaseModel):
@@ -239,16 +385,18 @@ async def list_models():
 
 @app.get("/v1/voices")
 async def list_voices():
-    """List available voices (OpenAI compatible)"""
-    available_spks = cosyvoice.list_available_spks() if cosyvoice else list(VOICE_MAPPING.keys())
+    """List available voices from VOICE_DIR"""
+    voices = list_available_voices()
     return {
         "voices": [
             {
-                "voice": voice,
-                "name": voice.capitalize(),
-                "description": f"{voice.capitalize()} voice"
+                "voice": v["name"],
+                "name": v["name"].replace("-", " ").replace("_", " ").title(),
+                "audio_file": v["audio_file"],
+                "has_text": v["has_text"],
+                "mode": "zero-shot" if v["has_text"] else "cross-lingual",
             }
-            for voice in VOICE_MAPPING.keys()
+            for v in voices
         ]
     }
 
@@ -272,18 +420,30 @@ async def create_speech(request: CreateSpeechRequest, http_request: Request):
     # Validate speed parameter
     speed = max(0.25, min(4.0, request.speed))
 
-    # Determine inference mode based on provided parameters
+    # Resolve voice parameter - check if it's a custom voice file
+    voice_audio_file, voice_prompt_text = resolve_voice_file(request.voice)
+
+    # Unify voice and prompt_wav parameters
+    # Priority: explicit prompt_wav > voice file > standard voice mapping
+    final_prompt_wav = request.prompt_wav if request.prompt_wav else voice_audio_file
+    final_prompt_text = (
+        request.prompt_text if request.prompt_text else voice_prompt_text
+    )
+
+    # Determine inference mode based on unified parameters
     mode = "sft"
-    if request.prompt_text and request.prompt_wav:
+    if final_prompt_text and final_prompt_wav:
         mode = "zero_shot"
-    elif request.prompt_wav and not request.prompt_text:
+    elif final_prompt_wav and not final_prompt_text:
         mode = "cross_lingual"
-    elif request.instruct_text and request.prompt_wav:
+    elif request.instruct_text and final_prompt_wav:
         mode = "instruct2"
     elif request.instruct_text:
         mode = "instruct"
 
-    logging.info(f"Using {mode} mode for inference")
+    logging.info(
+        f"Using {mode} mode for inference (voice={request.voice}, custom_voice={voice_audio_file is not None})"
+    )
 
     try:
         # Get content type based on response format
@@ -300,17 +460,17 @@ async def create_speech(request: CreateSpeechRequest, http_request: Request):
         # Generate audio based on mode
         if mode == "zero_shot":
             # Zero-shot mode: clone voice from prompt
-            prompt_wav_path = get_prompt_wav_path(request.prompt_wav)
+            prompt_wav_path = get_prompt_wav_path(final_prompt_wav)
             model_output = cosyvoice.inference_zero_shot(
                 tts_text=request.input,
-                prompt_text=request.prompt_text,
+                prompt_text=final_prompt_text,
                 prompt_wav=prompt_wav_path,
                 stream=False,
-                speed=speed
+                speed=speed,
             )
         elif mode == "cross_lingual":
             # Cross-lingual mode: clone voice without text prompt
-            prompt_wav_path = get_prompt_wav_path(request.prompt_wav)
+            prompt_wav_path = get_prompt_wav_path(final_prompt_wav)
             model_output = cosyvoice.inference_cross_lingual(
                 tts_text=request.input,
                 prompt_wav=prompt_wav_path,
@@ -318,14 +478,15 @@ async def create_speech(request: CreateSpeechRequest, http_request: Request):
                 speed=speed
             )
         elif mode == "instruct":
-            # Instruct mode: use instruction with speaker
+            # Instruct mode: use instruction with speaker (requires model with SFT support)
             available_spks = cosyvoice.list_available_spks()
             if not available_spks:
                 raise HTTPException(
                     status_code=400,
                     detail="Instruct mode not supported by this model. Please provide both instruct_text and prompt_wav for instruct2 mode."
                 )
-            spk_id = VOICE_MAPPING.get(request.voice, available_spks[0])
+            # Use first available speaker as default
+            spk_id = available_spks[0]
             model_output = cosyvoice.inference_instruct(
                 tts_text=request.input,
                 spk_id=spk_id,
@@ -335,7 +496,7 @@ async def create_speech(request: CreateSpeechRequest, http_request: Request):
             )
         elif mode == "instruct2":
             # Instruct2 mode: use instruction with prompt audio
-            prompt_wav_path = get_prompt_wav_path(request.prompt_wav)
+            prompt_wav_path = get_prompt_wav_path(final_prompt_wav)
             model_output = cosyvoice.inference_instruct2(
                 tts_text=request.input,
                 instruct_text=request.instruct_text,
@@ -344,14 +505,15 @@ async def create_speech(request: CreateSpeechRequest, http_request: Request):
                 speed=speed
             )
         else:
-            # Default SFT mode: use pre-defined speaker
+            # Default SFT mode: use pre-defined speaker (requires model with SFT support)
             available_spks = cosyvoice.list_available_spks()
             if not available_spks:
                 raise HTTPException(
                     status_code=400,
                     detail="SFT mode not supported by this model. Please provide prompt_wav for zero-shot/cross-lingual mode, or instruct_text for instruct mode."
                 )
-            spk_id = VOICE_MAPPING.get(request.voice, available_spks[0])
+            # Use first available speaker as default
+            spk_id = available_spks[0]
             model_output = cosyvoice.inference_sft(
                 tts_text=request.input,
                 spk_id=spk_id,

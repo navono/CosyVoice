@@ -1,9 +1,18 @@
-MODEL_DIR := /mnt/e/data/hf_models/hub/models--FunAudioLLM--Fun-CosyVoice3-0.5B-2512/snapshots/07018dea66cd8e62c48ede5294d1bd8850cb0cad/
-PORT := 8000
-HOST := 0.0.0.0
-DEVICE := 0
-IMAGE_NAME := cosyvoice:openai-latest
-CONDA_ENV := cosyvoice
+# Load environment variables from .env file
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
+# Default values if not set in .env
+MODEL_DIR ?= pretrained_models/Fun-CosyVoice3-0.5B
+PORT ?= 8000
+HOST ?= 0.0.0.0
+DEVICE ?= 0
+IMAGE_NAME ?= cosyvoice:openai-latest
+CONDA_ENV ?= cosyvoice
+VOICE_DIR ?= /workspace/voices
+HOST_VOICE_DIR ?= /mnt/e/OneDrive/data_sync/audio_samples
 
 CONDA_ACTIVATE := . $$(conda info --base)/etc/profile.d/conda.sh && conda activate $(CONDA_ENV) &&
 
@@ -11,7 +20,7 @@ gradio:
 	python webui.py --port 15000 --model_dir $(MODEL_DIR) --device $(DEVICE)
 
 openai:
-	python runtime/python/fastapi/openai_compatible.py --model_dir $(MODEL_DIR) --port $(PORT) --host $(HOST) --device $(DEVICE)
+	python runtime/python/fastapi/openai_compatible.py --model_dir $(MODEL_DIR) --port $(PORT) --host $(HOST) --device $(DEVICE) --voice_dir $(VOICE_DIR)
 
 openai-jit:
 	$(CONDA_ACTIVATE) python runtime/python/fastapi/openai_compatible.py --model_dir $(MODEL_DIR) --port $(PORT) --host $(HOST) --device $(DEVICE) --load_jit
@@ -26,7 +35,7 @@ openai-fp16:
 	$(CONDA_ACTIVATE) python runtime/python/fastapi/openai_compatible.py --model_dir $(MODEL_DIR) --port $(PORT) --host $(HOST) --device $(DEVICE) --fp16
 
 up:
-	MODEL_DIR=$(MODEL_DIR) PORT=$(PORT) HOST=$(HOST) DEVICE=$(DEVICE) docker compose up -d
+	MODEL_DIR=$(MODEL_DIR) PORT=$(PORT) HOST=$(HOST) DEVICE=$(DEVICE) VOICE_DIR=$(VOICE_DIR) docker compose up -d
 
 down:
 	docker compose down
@@ -35,6 +44,7 @@ logs:
 	docker compose logs -f
 
 build:
+	cp .env.example .env &&
 	git submodule init && git submodule update &&
 	docker build --network=host -t $(IMAGE_NAME) -f docker/Dockerfile .
 

@@ -9,6 +9,7 @@ services:
       - "${PORT:-8000}:8000"
     environment:
       - MODEL_DIR=${MODEL_DIR:-/mnt/e/data/hf_models/hub/models--FunAudioLLM--Fun-CosyVoice3-0.5B-2512/snapshots/07018dea66cd8e62c48ede5294d1bd8850cb0cad}
+      - VOICE_DIR=${VOICE_DIR:-/workspace/voices}
       - PORT=${PORT:-8000}
       - HOST=${HOST:-0.0.0.0}
       - DEVICE=${DEVICE:-0}
@@ -23,6 +24,8 @@ services:
     volumes:
       # Mount local HF cache so model_dir exists in container
       - /mnt/e/data/hf_models/hub:/mnt/e/data/hf_models/hub:ro
+      # Mount local voice samples directory
+      - ${HOST_VOICE_DIR:-/mnt/e/OneDrive/data_sync/audio_samples}:/workspace/voices:ro
       # Mount source code for development (no need to rebuild on code changes)
       - ./cosyvoice:/workspace/CosyVoice/cosyvoice
       - ./runtime:/workspace/CosyVoice/runtime
