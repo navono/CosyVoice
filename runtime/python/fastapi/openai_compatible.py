@@ -51,6 +51,12 @@ logging.getLogger('matplotlib').setLevel(logging.WARNING)
 # Voice directory for custom voice samples
 VOICE_DIR = os.getenv("VOICE_DIR", "/workspace/voices")
 
+# Default voice to use when OpenAI default voices are not found
+DEFAULT_VOICE = os.getenv("DEFAULT_VOICE", "Female-成熟_01")
+
+# OpenAI default voices that should trigger fallback
+OPENAI_DEFAULT_VOICES = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+
 # OpenAI API compatible models
 app = FastAPI(
     title="CosyVoice OpenAI Compatible API",
@@ -160,6 +166,12 @@ def resolve_voice_file(voice: str) -> tuple[Optional[str], Optional[str]]:
 
     if not audio_file:
         logging.warning(f"Voice audio file not found for: {voice}")
+
+        # If this is an OpenAI default voice, try fallback to DEFAULT_VOICE
+        if voice in OPENAI_DEFAULT_VOICES:
+            logging.info(f"Attempting fallback to default voice: {DEFAULT_VOICE}")
+            return resolve_voice_file(DEFAULT_VOICE)
+
         return None, None
 
     # Try to find corresponding text file
