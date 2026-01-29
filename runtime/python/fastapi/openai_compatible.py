@@ -373,29 +373,23 @@ class VoicesResponse(BaseModel):
     voices: list
 
 
-@app.get("/v1/models")
+@app.get("/v1/audio/models")
 async def list_models():
     """List available models (OpenAI compatible)"""
     return {
         "object": "list",
         "data": [
             {
-                "id": "tts-1",
+                "id": "cosyvoice-tts",
                 "object": "model",
                 "created": 1677610602,
-                "owned_by": "cosyvoice"
-            },
-            {
-                "id": "tts-1-hd",
-                "object": "model",
-                "created": 1677610602,
-                "owned_by": "cosyvoice"
+                "owned_by": "cosyvoice",
             }
-        ]
+        ],
     }
 
 
-@app.get("/v1/voices")
+@app.get("/v1/audio/voices")
 async def list_voices():
     """List available voices from VOICE_DIR"""
     voices = list_available_voices()
@@ -589,11 +583,11 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "audio_speech": "/v1/audio/speech",
-            "models": "/v1/models",
-            "voices": "/v1/voices",
-            "health": "/health"
+            "models": "/v1/audio/models",
+            "voices": "/v1/audio/voices",
+            "health": "/health",
         },
-        "documentation": "https://platform.openai.com/docs/api-reference/audio/createSpeech"
+        "documentation": "https://platform.openai.com/docs/api-reference/audio/createSpeech",
     }
 
 
